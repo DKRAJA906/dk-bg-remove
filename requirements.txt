@@ -1,5 +1,6 @@
-flask
-flask-cors
+fastapi
+uvicorn
+python-multipart
 rembg
 pillow
 gunicorn
