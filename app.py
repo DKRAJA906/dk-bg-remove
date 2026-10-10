@@ -30,3 +30,10 @@ async def remove_background(file: UploadFile = File(...)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+     
+if _name_ == "_main_":
+    import os
+    import uvicorn
+    
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port)
