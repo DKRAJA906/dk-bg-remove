@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo Background Remover</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f4f6fb; margin:0; padding:20px; }
+    .box { max-width:520px; margin:auto; background:#fff; padding:24px; border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.08); text-align:center; }
+    input, button { margin-top:14px; }
+    button { background:#2563eb; color:#fff; border:0; padding:12px 22px; border-radius:10px; font-size:16px; cursor:pointer; }
+    button:disabled { background:#9ca3af; }
+    #preview { max-width:100%; margin-top:18px; border-radius:12px; display:none; }
+    #status { margin-top:12px; color:#555; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Photo Background Remover</h2>
+    <input type="file" id="photo" accept="image/*">
+    <br>
+    <button id="removeBtn" onclick="removeBackground()">Background Remove करें</button>
+    <p id="status"></p>
+    <img id="preview" alt="Result">
+    <br>
+    <a id="download" href="#" download="no-bg.png" style="display:none">PNG Download करें</a>
+  </div>
+
+  <script>
+    const API_URL = "https://YOUR-BACKEND-URL.onrender.com/remove-bg";
+
+    async function removeBackground() {
+      const fileInput = document.getElementById("photo");
+      const status = document.getElementById("status");
+      const button = document.getElementById("removeBtn");
+      const preview = document.getElementById("preview");
+      const download = document.getElementById("download");
+
+      if (!fileInput.files.length) {
+        status.innerText = "पहले photo select करें।";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      button.disabled = true;
+      status.innerText = "Processing हो रहा है, कृपया प्रतीक्षा करें...";
+      preview.style.display = "none";
+      download.style.display = "none";
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          body: formData
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Server error");
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+
+        preview.src = url;
+        preview.style.display = "block";
+        download.href = url;
+        download.style.display = "inline-block";
+        status.innerText = "तैयार! नीचे से download करें।";
+      } catch (e) {
+        status.innerText = "समस्या: " + e.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
