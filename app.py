@@ -1,3 +1,5 @@
+import os
+import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -17,11 +19,11 @@ app.add_middleware(
 async def remove_background(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Sirf image file upload karein")
-
+    
     try:
         image_bytes = await file.read()
         output_bytes = remove(image_bytes)
-
+        
         return Response(
             content=output_bytes,
             media_type="image/png",
@@ -31,10 +33,7 @@ async def remove_background(file: UploadFile = File(...)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-     
-if _name_ == "_main_":
-    import os
-    import uvicorn
-    
+
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run("app:app", host="0.0.0.0", port=port)
