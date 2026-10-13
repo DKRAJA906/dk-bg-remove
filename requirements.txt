@@ -1,6 +1,5 @@
 fastapi
 uvicorn
 python-multipart
-rembg[cpu]
-pillow
-gunicorn
+rembg
+onnxruntime
