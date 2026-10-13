@@ -3,10 +3,11 @@ import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from rembg import remove
+from rembg import remove, new_session
 
 app = FastAPI(title="Background Remover API")
 
+# CORS middleware taaki frontend se request block na ho
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,6 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Lightweight model load kar rahe hain taaki Render free tier (512MB RAM) par crash na ho
+session = new_session("u2netp")
+
 @app.post("/remove-bg")
 async def remove_background(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
@@ -22,7 +26,8 @@ async def remove_background(file: UploadFile = File(...)):
     
     try:
         image_bytes = await file.read()
-        output_bytes = remove(image_bytes)
+        # lightweight session pass kiya hai memory bachane ke liye
+        output_bytes = remove(image_bytes, session=session)
         
         return Response(
             content=output_bytes,
@@ -33,6 +38,10 @@ async def remove_background(file: UploadFile = File(...)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+def home():
+    return {"message": "Background Remover API is running successfully!"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
