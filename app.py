@@ -15,7 +15,7 @@ app = FastAPI(
 # अपना GitHub Pages URL यहाँ डालें
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
-    "https://YOUR_USERNAME.github.io"
+    "https://dkraja906.github.io"
 )
 
 app.add_middleware(
