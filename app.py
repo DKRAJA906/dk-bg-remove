@@ -1,18 +1,21 @@
 import io
 import os
 
+# rembg import से पहले thread limit रखें
+os.environ["OMP_NUM_THREADS"] = "1"
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from PIL import Image
 from rembg import new_session, remove
 
+
 app = FastAPI(
     title="Photo Background Remover API",
-    version="1.0"
+    version="1.1"
 )
 
-# अपना GitHub Pages URL यहाँ डालें
 FRONTEND_URL = os.getenv(
     "FRONTEND_URL",
     "https://dkraja906.github.io"
@@ -26,8 +29,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Model एक बार load होगा और requests में reuse होगा
-session = new_session("isnet-general-use")
+# हल्का model एक बार load करके reuse करें
+session = new_session(
+    "u2netp",
+    providers=["CPUExecutionProvider"]
+)
 
 ALLOWED_TYPES = {
     "image/jpeg",
@@ -39,12 +45,15 @@ ALLOWED_TYPES = {
 MAX_FILE_SIZE_MB = 12
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
+MAX_IMAGE_SIZE = (1024, 1024)
+
 
 @app.get("/")
 async def home():
     return {
         "status": "running",
         "service": "Photo Background Remover",
+        "model": "u2netp",
         "usage": {
             "endpoint": "/remove-bg",
             "method": "POST",
@@ -74,7 +83,10 @@ async def remove_background(
     image_bytes = await file.read()
 
     if not image_bytes:
-        raise HTTPException(status_code=400, detail="Image file खाली है।")
+        raise HTTPException(
+            status_code=400,
+            detail="Image file खाली है।"
+        )
 
     if len(image_bytes) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
@@ -83,16 +95,9 @@ async def remove_background(
         )
 
     try:
-        # Background हटाएँ
-        cutout_bytes = remove(
-            image_bytes,
-            session=session,
-            post_process_mask=True
-        )
+        # Background color पहले validate करें
+        background_rgb = None
 
-        result_image = Image.open(io.BytesIO(cutout_bytes)).convert("RGBA")
-
-        # Optional background color
         if bg_color:
             clean_color = bg_color.strip().lstrip("#")
 
@@ -103,35 +108,65 @@ async def remove_background(
                 )
 
             try:
-                red = int(clean_color[0:2], 16)
-                green = int(clean_color[2:4], 16)
-                blue = int(clean_color[4:6], 16)
+                background_rgb = (
+                    int(clean_color[0:2], 16),
+                    int(clean_color[2:4], 16),
+                    int(clean_color[4:6], 16)
+                )
             except ValueError:
                 raise HTTPException(
                     status_code=400,
                     detail="bg_color valid hex color नहीं है।"
                 )
 
+        # Processing के लिए image छोटी करें
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            source.thumbnail(
+                MAX_IMAGE_SIZE,
+                Image.Resampling.LANCZOS
+            )
+            resized_image = source.convert("RGBA")
+
+        # Background हटाएँ
+        cutout_image = remove(
+            resized_image,
+            session=session,
+            post_process_mask=False
+        )
+
+        result_image = cutout_image.convert("RGBA")
+
+        # जरूरत होने पर नया background color लगाएँ
+        if background_rgb is not None:
+            red, green, blue = background_rgb
+
             background = Image.new(
                 "RGBA",
                 result_image.size,
                 (red, green, blue, 255)
             )
+
             background.paste(
                 result_image,
-                mask=result_image.split()[3]
+                mask=result_image.getchannel("A")
             )
+
             result_image = background
 
+        # PNG response तैयार करें
         output_buffer = io.BytesIO()
-        result_image.save(output_buffer, format="PNG", optimize=True)
-        output_buffer.seek(0)
+
+        result_image.save(
+            output_buffer,
+            format="PNG"
+        )
 
         return Response(
             content=output_buffer.getvalue(),
             media_type="image/png",
             headers={
-                "Content-Disposition": "attachment; filename=no-background.png"
+                "Content-Disposition":
+                    "attachment; filename=no-background.png"
             }
         )
 
@@ -141,5 +176,8 @@ async def remove_background(
     except Exception:
         raise HTTPException(
             status_code=500,
-            detail="Background remove करने में समस्या आई। कृपया दूसरी image try करें।"
+            detail=(
+                "Background remove करने में समस्या आई। "
+                "कृपया दूसरी या छोटी image try करें।"
+            )
         )
