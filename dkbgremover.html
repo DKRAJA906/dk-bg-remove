@@ -3,77 +3,237 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Photo Background Remover</title>
+
   <style>
-    body { font-family: Arial, sans-serif; background:#f4f6fb; margin:0; padding:20px; }
-    .box { max-width:520px; margin:auto; background:#fff; padding:24px; border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.08); text-align:center; }
-    input, button { margin-top:14px; }
-    button { background:#2563eb; color:#fff; border:0; padding:12px 22px; border-radius:10px; font-size:16px; cursor:pointer; }
-    button:disabled { background:#9ca3af; }
-    #preview { max-width:100%; margin-top:18px; border-radius:12px; display:none; }
-    #status { margin-top:12px; color:#555; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6fb;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .box {
+      max-width: 520px;
+      margin: auto;
+      background: #fff;
+      padding: 24px;
+      border-radius: 16px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, .08);
+      text-align: center;
+    }
+
+    input,
+    button {
+      margin-top: 14px;
+    }
+
+    input[type="file"] {
+      max-width: 100%;
+    }
+
+    button {
+      background: #2563eb;
+      color: #fff;
+      border: 0;
+      padding: 12px 22px;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    #preview {
+      max-width: 100%;
+      margin-top: 18px;
+      border-radius: 12px;
+      display: none;
+    }
+
+    #status {
+      margin-top: 12px;
+      color: #555;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    #download {
+      display: none;
+      margin-top: 16px;
+      color: #2563eb;
+    }
+
+    .note {
+      color: #666;
+      font-size: 13px;
+      line-height: 1.6;
+    }
   </style>
 </head>
+
 <body>
   <div class="box">
     <h2>Photo Background Remover</h2>
-    <input type="file" id="photo" accept="image/*">
+
+    <input
+      type="file"
+      id="photo"
+      accept="image/jpeg,image/png,image/webp"
+    >
+
     <br>
-    <button id="removeBtn" onclick="removeBackground()">Background Remove करें</button>
-    <p id="status"></p>
-    <img id="preview" alt="Result">
+
+    <button id="removeBtn" type="button">
+      Background Remove करें
+    </button>
+
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <img id="preview" alt="Background हटाई गई फोटो">
+
     <br>
-    <a id="download" href="#" download="no-bg.png" style="display:none">PNG Download करें</a>
+
+    <a id="download" download="no-background.png">
+      PNG Download करें
+    </a>
+
+    <p class="note">
+      JPG, PNG या WEBP फोटो चुनें। अधिकतम file size 12 MB है।
+      परिणाम की अधिकतम चौड़ाई और ऊँचाई 1024 pixels होगी।
+    </p>
   </div>
 
   <script>
-    const API_URL = "https://dk-bg-remove.onrender.com/remove-bg";
+    const API_URL =
+      "https://dk-bg-remove.onrender.com/remove-bg";
+
+    const MAX_FILE_SIZE = 12 * 1024 * 1024;
+
+    const ALLOWED_TYPES = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp"
+    ];
+
+    const fileInput = document.getElementById("photo");
+    const status = document.getElementById("status");
+    const button = document.getElementById("removeBtn");
+    const preview = document.getElementById("preview");
+    const download = document.getElementById("download");
+
+    let resultUrl = null;
+
+    function clearResult() {
+      preview.style.display = "none";
+      preview.removeAttribute("src");
+
+      download.style.display = "none";
+      download.removeAttribute("href");
+
+      if (resultUrl) {
+        URL.revokeObjectURL(resultUrl);
+        resultUrl = null;
+      }
+    }
 
     async function removeBackground() {
-      const fileInput = document.getElementById("photo");
-      const status = document.getElementById("status");
-      const button = document.getElementById("removeBtn");
-      const preview = document.getElementById("preview");
-      const download = document.getElementById("download");
+      const file = fileInput.files[0];
 
-      if (!fileInput.files.length) {
-        status.innerText = "पहले photo select करें।";
+      if (!file) {
+        status.textContent = "पहले photo select करें।";
         return;
       }
 
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        status.textContent =
+          "केवल JPG, PNG या WEBP photo चुनें।";
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        status.textContent =
+          "Photo 12 MB से बड़ी है। छोटी photo चुनें।";
+        return;
+      }
+
+      clearResult();
+
       const formData = new FormData();
-      formData.append("file", fileInput.files[0]);
+      formData.append("file", file);
+
+      // खाली value से transparent background मिलेगा
+      formData.append("bg_color", "");
 
       button.disabled = true;
-      status.innerText = "Processing हो रहा है, कृपया प्रतीक्षा करें...";
-      preview.style.display = "none";
-      download.style.display = "none";
+      fileInput.disabled = true;
+      status.textContent =
+        "Processing हो रहा है, कृपया प्रतीक्षा करें...";
 
       try {
-        const res = await fetch(API_URL, {
+        const response = await fetch(API_URL, {
           method: "POST",
           body: formData
         });
 
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || "Server error");
+        if (!response.ok) {
+          let message =
+            `Server से error मिला (HTTP ${response.status})।`;
+
+          const errorData = await response
+            .json()
+            .catch(() => null);
+
+          if (typeof errorData?.detail === "string") {
+            message =
+              `${errorData.detail} (HTTP ${response.status})`;
+          } else if (response.status === 502) {
+            message =
+              "HTTP 502: Backend से सही response नहीं मिला। " +
+              "Render के Logs जाँचें।";
+          }
+
+          throw new Error(message);
         }
 
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
+        const blob = await response.blob();
 
-        preview.src = url;
+        if (!blob.size) {
+          throw new Error("Server से खाली image मिली।");
+        }
+
+        resultUrl = URL.createObjectURL(blob);
+
+        preview.src = resultUrl;
         preview.style.display = "block";
-        download.href = url;
+
+        download.href = resultUrl;
         download.style.display = "inline-block";
-        status.innerText = "तैयार! नीचे से download करें।";
-      } catch (e) {
-        status.innerText = "समस्या: " + e.message;
+
+        status.textContent =
+          "तैयार! नीचे से PNG download करें।";
+
+      } catch (error) {
+        status.textContent =
+          "समस्या: " + error.message;
+
       } finally {
         button.disabled = false;
+        fileInput.disabled = false;
       }
     }
+
+    button.addEventListener("click", removeBackground);
+
+    fileInput.addEventListener("change", () => {
+      clearResult();
+      status.textContent = "";
+    });
   </script>
 </body>
 </html>
